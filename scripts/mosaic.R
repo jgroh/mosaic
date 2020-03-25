@@ -360,17 +360,6 @@ points(herb.scores.st ~ log.min.dist, pch = pchvec, col = colvec, lwd = 2)
 
 dev.off()
 
-# Does this pattern hold when using only specimens that are not very close?
-
-z <- lm(predict(LDA.trn, newdata = lda.input)$x ~ log.min.dist[ind.trn])
-plot(predict(LDA.trn, newdata = lda.input)$x ~ log.min.dist[ind.trn],
-     col = as.factor(herb$species.label[ind.trn]))
-f <- herb$species.label[ind.trn] == "flavescens"
-z <- lm(predict(LDA.trn, newdata = lda.input)$x[f] ~ log.min.dist[ind.trn][f])
-abline(z)
-anova(z)
-
-dev.off()
 
 # ----- FIGURE 3A: Population Hybrid Index Stripchart -----
 
@@ -413,7 +402,7 @@ axis(2, lwd = 0, lwd.ticks = 1, las = 2, cex.axis = 1.2)
 axis(1, at = 1:8, labels = c(1:5,7:9))
 box()
 
-
+cbind(all.coll.dat2$ pop.scores[all.coll.dat2$site == "var. miniana"])
 
 # ----- FIGURE 3B: Population Sepal Color Stripchart ----- 
 
