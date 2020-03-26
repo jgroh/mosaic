@@ -2,6 +2,7 @@ library(geosphere)
 library(MASS)
 library(ggmap)
 library(ggplot2)
+library(visreg)
 
 # ----- Read data files -----
 
@@ -9,7 +10,7 @@ herb <- read.csv("data/hrbm-pheno-mosaic.csv", stringsAsFactors = FALSE)
 coll <- read.csv("data/ntrl-pops-pheno.csv", stringsAsFactors = FALSE)
 porc <- read.csv("data/porcupine-vlys-2018-pheno.csv", stringsAsFactors = FALSE)
 mini <- read.csv("data/miniana.csv", stringsAsFactors = FALSE)
-
+color <- read.csv("data/sep-color-mosaic.csv", stringsAsFactors = FALSE)
 
 # columns with traits used for analysis
 cols <- c("species.label", "anther.exsertion", 
@@ -123,6 +124,7 @@ lda.input$species.label <- as.factor(lda.input$species.label)
 
 
 # ----- Define size-correction function for natural populations  -----
+sigmoid <- function(x){1/(1+ exp(-x))} 
 
 size.correct.pops <- function(x, scaling = "standard"){ 
   
@@ -164,7 +166,6 @@ size.correct.pops <- function(x, scaling = "standard"){
   }
   
   #re-scale values to range between 0 and 1
-  sigmoid <- function(x){1/(1+ exp(-x))} 
   
   if(scaling == "sigmoid"){
     lda.adjusted <- sigmoid(lda.adjusted)
@@ -202,7 +203,7 @@ size.correct.herbarium <- function(x, scaling = "standard"){
     size.models[[i]] <- spc.lm
   }
   
-  lda.adjusted <- vector()
+  lda.adjusted.herb <- vector()
   for(i in 1:nrow(x)){ # loop projects individuals to a common size, then displaces lda score from the lsmean by the residual from population regression line at its original size
     
     spc <- x$species.label[i]
@@ -213,18 +214,21 @@ size.correct.herbarium <- function(x, scaling = "standard"){
     
     lda.predicted <- predict( size.models[[spc.num]], newdata = pred.dat)
     residual <- lda.raw.scores[i] - lda.predicted
-    lda.adjusted[i] <- predict( size.models[[spc.num]], newdata = data.frame(size = overall.size)) + residual
+    lda.adjusted.herb[i] <- predict( size.models[[spc.num]], newdata = data.frame(size = overall.size)) + residual
     
   }
   
   if(scaling == "sigmoid"){
     sigmoid <- function(x){1/(1+ exp(-x))}
-    lda.adjusted <- sigmoid(lda.adjusted)
+    hybrid.index.herb <- sigmoid(lda.adjusted.herb)
     
   } else{
-    lda.adjusted <- (lda.adjusted - min(lda.adjusted))/(max(lda.adjusted) - min(lda.adjusted))
+    hybrid.index.herb <- (lda.adjusted.herb - min(lda.adjusted.herb))/(max(lda.adjusted.herb) - min(lda.adjusted.herb))
   }
-  return(list(lda.raw.scores, predictions$class, lda.adjusted))
+  return(list(lda.raw.scores = lda.raw.scores, 
+              predicted.group = predictions$class, 
+              lda.adjusted.herb = lda.adjusted.herb, 
+              hybrid.index.herb = hybrid.index.herb))
 }
 
 
@@ -234,13 +238,11 @@ size.correct.herbarium <- function(x, scaling = "standard"){
 
 plot.data <- herb[, c("species.label", "Geo_LongDegree", "Geo_LatDegree")]
 herb.sc <- size.correct.herbarium(herb, scaling = "sigmoid")
-herb.scores <- herb.sc[[3]]
-
-#herb.scores <- predict(LDA.trn, herb, prior = c(.5,.5))$x
+herb.scores <- herb.sc$hybrid.index.herb
 
 
 # check predictive accuracy
-mean(as.character(herb.sc[[2]]) == herb$species.label)
+mean(as.character(herb.sc$predicted.group) == herb$species.label)
 
 plot.data$fit <- herb.scores
 
@@ -293,7 +295,8 @@ heat.map <- ggmap(map) + geom_point(data = all.plot.data,
   labs(title = "", x = "Longitude", 
        y = "Latitude", fill = "Hybrid index", 
        shape = "Verbatim species \ndetermination") +
-  theme(axis.text=element_text(size=12), axis.title=element_text(size=15))
+  theme(axis.text=element_text(size=12), axis.title=element_text(size=15), 
+        legend.text=element_text(size=12), legend.title=element_text(size=15))
 
 print(heat.map)
 dev.off()
@@ -301,7 +304,7 @@ dev.off()
 
 # ----- FIGURE 2: Geospatial Morphology Diagram -----
 
-herb.scores.st <- size.correct.herbarium(herb, scaling = "standard")[[3]]
+herb.scores.st <- size.correct.herbarium(herb, scaling = "standard")$hybrid.index.herb
 
 # to check whether the size-correction procedure has any influence on the result:
 #herb.scores.st <- predict(LDA.trn, newdata = herb, prior = c(.5,.5))$x
@@ -417,7 +420,7 @@ stripchart(log.rg ~ site, data = color, vertical = TRUE, pch = 1, las = 2,
           xaxt = "n", yaxt = "n", lwd = 2, cex.axis = 1.2, 
            cex.lab = 1.2, ylim = c(-.05,.8))
 axis(2, las = 2, cex.axis = 1.2)
-axis(1, at = 1:7, labels = c(1,2,4,5,6,8,7))
+axis(1, at = 1:7, labels = c(1,2,4,5,6,9,7))
 
 # confirm order of populations on x axis
 levels(color$site)
@@ -429,38 +432,17 @@ dev.off()
 
 s <- predict(PCA.pooled, newdata = porc)[,2]
 l <- predict(LDA.trn, newdata = porc)$x
+hybrid <- (l - min(herb.sc$lda.adjusted.herb))/(max(herb.sc$lda.adjusted.herb) - min(herb.sc$lda.adjusted.herb))
+w <- cbind.data.frame(size = s, l = l, hybrid = hybrid, elev = porc$elevation)
 
-h <- cbind.data.frame(size = s, LD1 = l)
-
-z <- lm(LD1 ~ size, data = h)
-plot(l ~ s, col = as.factor(porc$site))
-abline(z)
-
-# check robustness of cline to size correction
-plot(l ~ porc$elevation)
-plot(lda.adjusted ~ porc$elevation)
-
-# make figure
-zdat <- cbind.data.frame(LD1 = lda.adjusted, elev = coll.dat$elevation)
-z <- lm(LD1 ~ elev, data = zdat)
-
-plot(zdat$LD1 ~ coll.dat$elevation, lwd = 2,
-     ylab = "Hybrid index", xlab = "Elevation (m)", 
-     cex.axis = 1.2, cex.lab = 1.2)
-
-# add confidence bands
-xpt <- seq(min(zdat$elev), max(zdat$elev), length.out=100)
-prd <- predict(z, newdata = data.frame(elev = xpt),  interval = 'confidence')
-lines(prd[,2] ~ xpt,  lty = 2)
-lines(prd[,3] ~ xpt, lty = 2)
-
-#polygon(c(rev(xpt), xpt), c(rev(prd[ ,3]), prd[ ,2]), col = rgb(190/255,190/255,190/255, .6), border = NA)
-
-#add regression lines
-xpt <- range(zdat$elev)
-ypt <- predict(z, newdata = data.frame(elev = xpt))
-lines(x = xpt, y = ypt, lwd = 3)
-
+# fit model with size as a covariate
+z <- lm(hybrid ~ elev + size, data = w)
+summary(z)
+par(oma = c(0,1,0,0))
+visreg(z, xvar = "elev", points=list(pch = 1, lwd = 2, cex = 1, col = "black", cex = 1),
+       fill.par=list(col = "lightgray"), line.par = list(col= "black"),cex.lab= 1.2,
+       xlab = "Elevation (m)", ylab = "Hybrid index", cex.axis = 1.2)
+anova(z)
 
 
 
