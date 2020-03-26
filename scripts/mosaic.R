@@ -313,12 +313,7 @@ herb.scores.st <- size.correct.herbarium(herb, scaling = "standard")$hybrid.inde
 #herb.scores.st <- predict(LDA.trn, newdata = herb, prior = c(.5,.5))$posterior[,1]
 
 log.min.dist <- log(min.dist)
-colvec <- vector()
-colvec[fo] <- "black"
-colvec[fl] <- "darkgray"
-pchvec <- vector()
-pchvec[fo] <- 19
-pchvec[fl] <- 15
+
 
 #set up plot
 par(mar = c(5,5,4,2))
@@ -339,15 +334,15 @@ summary(foz)
 # add confidence bands
 xpfl2 <- seq(min(fl.dat$log.min.dist), max(fl.dat$log.min.dist), length.out=100)
 prfl <- predict(flz, newdata = data.frame(log.min.dist = xpfl2),  interval = 'confidence')
-lines(prfl[,2] ~ xpfl2,  lty = 2)
-lines(prfl[,3] ~ xpfl2, lty = 2)
-#polygon(c(rev(xpfl2), xpfl2), c(rev(prfl[ ,3]), prfl[ ,2]), col = rgb(190/255,190/255,190/255, .6), border = NA, lty = 2)
+#lines(prfl[,2] ~ xpfl2,  lty = 2)
+#lines(prfl[,3] ~ xpfl2, lty = 2)
+polygon(c(rev(xpfl2), xpfl2), c(rev(prfl[ ,3]), prfl[ ,2]), col = rgb(190/255,190/255,190/255, .5), border = NA)
 
 xpfo2 <- seq(min(fo.dat$log.min.dist), max(fo.dat$log.min.dist), length.out=100)
 prfo <- predict(foz, newdata = data.frame(log.min.dist = xpfo2),  interval = 'confidence')
-lines(prfo[,2] ~ xpfo2,  lty = 2)
-lines(prfo[,3] ~ xpfo2, lty = 2)
-#polygon(c(rev(xpfo2), xpfo2), c(rev(prfo[ ,3]), prfo[ ,2]), col = rgb(190/255,190/255,190/255, .6),  lty = 1)
+#lines(prfo[,2] ~ xpfo2,  lty = 2)
+#lines(prfo[,3] ~ xpfo2, lty = 2)
+polygon(c(rev(xpfo2), xpfo2), c(rev(prfo[ ,3]), prfo[ ,2]), col = rgb(190/255,190/255,190/255, .5), border = NA)
 
 #add regression lines
 xpfl <- range(fl.dat$log.min.dist)
@@ -359,7 +354,8 @@ ypfo <- predict(foz, newdata = data.frame(log.min.dist = xpfo))
 lines(x = xpfo, y = ypfo, lwd = 3)
 
 # add points
-points(herb.scores.st ~ log.min.dist, pch = pchvec, col = colvec, lwd = 2)
+points(herb.scores.st[fo] ~ log.min.dist[fo], pch = 19)
+points(herb.scores.st[fl] ~ log.min.dist[fl], pch =22, col = "black", bg = "darkgray", lwd = 0.6)
 
 dev.off()
 
@@ -376,6 +372,7 @@ mini4 <- mini[, cols4]
 colnames(mini4) <- cols3
 
 all.coll.dat2 <- rbind(coll[, cols3], porc[, cols3], mini4)
+all.coll.dat2 <- all.coll.dat2[all.coll.dat2$site != "Manning Park" & all.coll.dat2$site != "Clearwater",]
 
 
 # index sites
@@ -392,22 +389,31 @@ pop.scores <- size.correct.pops(all.coll.dat2, scaling = "sigmoid")
 all.coll.dat2$site <- factor(all.coll.dat2$site, 
                        levels = levels(as.factor(all.coll.dat2$site) )[order( tapply( 
                          pop.scores, all.coll.dat2$site, mean) ) ] )
-# population means, to go into table
-tapply(pop.scores, all.coll.dat2$site, mean)
 
 # make plot
 par(mar = par()$mar + c(0,1,0,0), bty = "o")
 stripchart(pop.scores ~ all.coll.dat2$site, vertical = TRUE, method = "jitter", 
-          pch = 1, lwd = 2, axes = "FALSE", 
+          pch = 1, lwd = 1.5, axes = "FALSE", 
            cex.lab = 1.2, ylab = "")
+
+# population means
+y  <-  tapply(pop.scores, all.coll.dat2$site, mean)
+
+for(i in 1:6){
+  lines(x = c(i-.35, i+.35), y = c(y[i], y[i]),  lwd = 2)
+}
+
 mtext(2, text = "Hybrid index", line = 3.5, cex = 1.2)
 axis(2, lwd = 0, lwd.ticks = 1, las = 2, cex.axis = 1.2)
-axis(1, at = 1:8, labels = c(1:5,7:9))
+axis(1, at = 1:6, labels = c(1:5,7))
 box()
 
-cbind(all.coll.dat2$ pop.scores[all.coll.dat2$site == "var. miniana"])
+#Which specimens annotated by Whittemore?
+cbind(pop.scores[all.coll.dat2$site == "var. miniana"], mini$annotated)
+
 
 # ----- FIGURE 3B: Population Sepal Color Stripchart ----- 
+color <- color[color$site != "Clearwater",]
 
 color$log.rg <- with(color, log(red.mean / green.mean))
 
@@ -417,10 +423,15 @@ color$site <- factor(color$site,
 
 stripchart(log.rg ~ site, data = color, vertical = TRUE, pch = 1, las = 2, 
            method = "jitter" , ylab = "Sepal red vs. green reflectance (log R/G)", 
-          xaxt = "n", yaxt = "n", lwd = 2, cex.axis = 1.2, 
+          xaxt = "n", yaxt = "n", lwd = 1.5, cex.axis = 1.2, 
            cex.lab = 1.2, ylim = c(-.05,.8))
+y2 <- tapply(color$log.rg, color$site, mean)
+for(i in 1:6){
+  lines(x = c(i-.35, i+.35), y = c(y2[i], y2[i]),  lwd = 2)
+}
+
 axis(2, las = 2, cex.axis = 1.2)
-axis(1, at = 1:7, labels = c(1,2,4,5,6,9,7))
+axis(1, at = 1:6, labels = c(1,2,4,5,6,7))
 
 # confirm order of populations on x axis
 levels(color$site)
