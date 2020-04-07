@@ -27,6 +27,7 @@ fl <- which(herb[, "species.label"] == "flavescens")
 pooled.dat <- rbind.data.frame( herb[, cols], coll[, cols], porc[, cols])
 pca.pooled.input <- pooled.dat[,-1]
 
+
 # run PCA
 PCA.pooled <- prcomp(pca.pooled.input, scale. = T)
 summary(PCA.pooled)
@@ -102,7 +103,10 @@ table(lda.input$species.label)
 g <- predict(PCA.pooled, newdata = pooled.dat[ind.trn,])
 plot(g[,2] ~ g[,1], col = as.factor(pooled.dat[ind.trn,]$species.label), lwd=2)
 
-
+#check whether size scores are significantly different between species in the training set
+gfo <- g[,2][pooled.dat[ind.trn,]$species.label == "formosa"]
+gfl <- g[,2][pooled.dat[ind.trn,]$species.label == "flavescens"]
+t.test(gfo, gfl)
 # ----- fit LDA model -----
 LDA.trn <- lda(species.label ~ ., data = lda.input)
 plot(LDA.trn)
@@ -304,60 +308,35 @@ dev.off()
 
 # ----- FIGURE 2: Geospatial Morphology Diagram -----
 
-herb.scores.st <- size.correct.herbarium(herb, scaling = "standard")$hybrid.index.herb
+# rescale discriminant scores between 0 and 1
+herb.scr <- (herb.sc$lda.raw.scores - min(herb.sc$lda.raw.scores))/(max(herb.sc$lda.raw.scores - min(herb.sc$lda.raw.scores)))
 
-# to check whether the size-correction procedure has any influence on the result:
-#herb.scores.st <- predict(LDA.trn, newdata = herb, prior = c(.5,.5))$x
+# get size sores
+size.scores <- predict(PCA.pooled, newdata = herb)[, 2] 
 
-# can also check whether assignment probablilities give same results
-#herb.scores.st <- predict(LDA.trn, newdata = herb, prior = c(.5,.5))$posterior[,1]
-
+# distance scores
 log.min.dist <- log(min.dist)
 
+# data frame
+d <- cbind.data.frame(LD1 = herb.scr, size= size.scores, dist = log.min.dist, species = herb$species.label)
 
-#set up plot
-par(mar = c(5,5,4,2))
-plot(herb.scores.st ~ log.min.dist, type = "n",
-     xlab = "Log(min km to record of other species)", #col = colvec,
-     ylab = "Hybrid index", yaxt = "n", cex.lab = 1.2, cex.axis = 1.2, 
-     xlim = c(0, 8))
-axis(2, las = 2, cex.axis = 1.2)
+# model
+z <- lm(LD1 ~ species*dist + size*species, data = d)
 
-#make models
-fl.dat <- cbind.data.frame(morph = herb.scores.st[fl], log.min.dist = log.min.dist[fl])
-flz <- lm(morph ~ log.min.dist, dat = fl.dat)
-summary(flz)
-fo.dat <- cbind.data.frame(morph = herb.scores.st[fo], log.min.dist = log.min.dist[fo])
-foz <- lm(morph ~ log.min.dist, dat = fo.dat)
-summary(foz)
+# plot
+par(oma = c(0,1,0,0))
+visreg(z, xvar = "dist", by = "species", overlay = T,
+       line = list(col=c("black", "black"), lwd = 3),
+       fill = list(col=c(grey(.5, alpha = .4))),
+       points = list(bg=c("darkgray", "black"), cex = 1, pch=c(22,21),col=c("black","black"), lwd = .5),
+       xlab = "Log(min km to record of other species)", 
+       ylab = "Hybrid index",
+       legend = F,
+       cex.lab = 1.2,
+       cex.axis = 1.2,
+       ylim = c(0,1)
+       )
 
-# add confidence bands
-xpfl2 <- seq(min(fl.dat$log.min.dist), max(fl.dat$log.min.dist), length.out=100)
-prfl <- predict(flz, newdata = data.frame(log.min.dist = xpfl2),  interval = 'confidence')
-#lines(prfl[,2] ~ xpfl2,  lty = 2)
-#lines(prfl[,3] ~ xpfl2, lty = 2)
-polygon(c(rev(xpfl2), xpfl2), c(rev(prfl[ ,3]), prfl[ ,2]), col = rgb(190/255,190/255,190/255, .5), border = NA)
-
-xpfo2 <- seq(min(fo.dat$log.min.dist), max(fo.dat$log.min.dist), length.out=100)
-prfo <- predict(foz, newdata = data.frame(log.min.dist = xpfo2),  interval = 'confidence')
-#lines(prfo[,2] ~ xpfo2,  lty = 2)
-#lines(prfo[,3] ~ xpfo2, lty = 2)
-polygon(c(rev(xpfo2), xpfo2), c(rev(prfo[ ,3]), prfo[ ,2]), col = rgb(190/255,190/255,190/255, .5), border = NA)
-
-#add regression lines
-xpfl <- range(fl.dat$log.min.dist)
-ypfl <- predict(flz, newdata = data.frame(log.min.dist = xpfl))
-lines(x = xpfl, y = ypfl, lwd = 3)
-
-xpfo <- range(fo.dat$log.min.dist)
-ypfo <- predict(foz, newdata = data.frame(log.min.dist = xpfo))
-lines(x = xpfo, y = ypfo, lwd = 3)
-
-# add points
-points(herb.scores.st[fo] ~ log.min.dist[fo], pch = 19)
-points(herb.scores.st[fl] ~ log.min.dist[fl], pch =22, col = "black", bg = "darkgray", lwd = 0.6)
-
-dev.off()
 
 
 # ----- FIGURE 3A: Population Hybrid Index Stripchart -----
